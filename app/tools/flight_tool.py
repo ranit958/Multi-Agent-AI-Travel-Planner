@@ -371,21 +371,48 @@ def parse_route(query: str):
 
         return dep_iata, arr_iata
 
+    # Pattern: <destination> ... from <origin> (e.g. 'Japan trip from India', 'Dubai trip from Kolkata')
+    trip_from_match = re.search(
+        r"\b([a-zA-Z\s]+?)(?:\s+trip|\s+tour|\s+vacation|\s+holiday)?\s+from\s+([a-zA-Z\s]+?)(?:\s+(?:on|for|under|including|with|in|at)\b|[.!?]|$)",
+        q_lower,
+    )
+    if trip_from_match:
+        dest_candidate = trip_from_match.group(1).split()[-1] if trip_from_match.group(1).split() else ""
+        orig_candidate = trip_from_match.group(2).split()[0] if trip_from_match.group(2).split() else ""
+        arr_candidate_iata = resolve_location_to_iata(dest_candidate)
+        dep_candidate_iata = resolve_location_to_iata(orig_candidate)
+        if dep_candidate_iata and arr_candidate_iata:
+            return dep_candidate_iata, arr_candidate_iata
+
     # Pattern: flights from X
-    match = re.search(r"\bfrom\s+(.+?)(?:[.!?]|$)", q_lower)
+    match = re.search(
+        r"\bfrom\s+([a-zA-Z\s]+?)(?:\s+(?:on|for|under|including|with|in|at)\b|[.!?]|$)",
+        q_lower,
+    )
 
     if match:
         origin_text = match.group(1)
         dep_iata = resolve_location_to_iata(origin_text)
-        return dep_iata, None
+        if dep_iata:
+            # Check if there is another location mentioned for destination
+            mentions = find_location_mentions(q)
+            for m in mentions:
+                res_iata = resolve_location_to_iata(m)
+                if res_iata and res_iata != dep_iata:
+                    return dep_iata, res_iata
+            return dep_iata, None
 
     # Pattern: flights to X
-    match = re.search(r"\bto\s+(.+?)(?:[.!?]|$)", q_lower)
+    match = re.search(
+        r"\bto\s+([a-zA-Z\s]+?)(?:\s+(?:on|for|under|including|with|in|at)\b|[.!?]|$)",
+        q_lower,
+    )
 
     if match:
         dest_text = match.group(1)
         arr_iata = resolve_location_to_iata(dest_text)
-        return None, arr_iata
+        if arr_iata:
+            return DEFAULT_ORIGIN_IATA, arr_iata
 
     # Fallback: find country/city mentions
     mentions = find_location_mentions(q)
